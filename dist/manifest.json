@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Zotero PDF Trim",
+  "version": "1.0",
+  "description": "Erzeugt saubere, Zotero-kompatible PDFs aus Webartikeln.",
+  
+  "icons": {
+    "48": "icons/icon-48.png"
+  },
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "scripting"
+  ],
+  
+  "background": {
+    "scripts": ["libs/html2canvas.min.js","libs/jspdf.umd.min.js","scripts/background.js"]
+  },
+  
+  "action": {
+    "default_icon": "icons/icon-48.png",
+    "default_title": "Zotero PDF Trim Tool"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      // Wichtig: Content-Skript wird nur aufgerufen, wenn es gebraucht wird
+      "js": ["libs/jspdf.umd.min.js","scripts/content.js"], 
+      "run_at": "document_idle"
+    }
+  ]
+}
