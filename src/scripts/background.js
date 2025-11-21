@@ -9,79 +9,80 @@ browser.action.onClicked.addListener((tab) => {
     });
 });
 
-browser.runtime.onMessage.addListener((message) => {
-    if (message.command === "generate-pdf") {
-        return handlePdfGeneration(message.htmlContent);
+browser.runtime.onMessage.addListener(async (message, sender) => {
+    if (message.command === 'generate-pdf-native') {
+
+        let tabId = null;
+        let url = null;
+
+        try {
+            console.log("Start: Erzeuge PDF...");
+
+            // 1. Blob URL erstellen
+            const htmlBlob = new Blob([message.html], { type: 'text/html' });
+            url = URL.createObjectURL(htmlBlob);
+
+            // 2. Tab erstellen und AKTIV schalten
+            const tab = await browser.tabs.create({
+                url: url,
+                active: true
+            });
+            tabId = tab.id;
+            console.log("Tab erstellt mit ID:", tabId);
+
+            // 3. Warten, bis der Tab vollständig geladen ist
+            await new Promise(resolve => {
+                const listener = (updatedTabId, changeInfo) => {
+                    if (updatedTabId === tabId && changeInfo.status === 'complete') {
+                        browser.tabs.onUpdated.removeListener(listener);
+                        resolve();
+                    }
+                };
+                browser.tabs.onUpdated.addListener(listener);
+            });
+
+            console.log("Tab ist geladen. Starte saveAsPDF...");
+
+            // 4. PDF Einstellungen - MINIMAL
+            // Wir lassen alles weg, was Fehler verursachen könnte.
+            // Firefox nutzt dann Standard A4.
+            const pdfSettings = {
+                headerCenter: message.title || "Artikel",
+                footerCenter: "&P / &PT"
+            };
+
+            // 5. API Aufruf
+            // Wir warten auf den Status
+            const status = await browser.tabs.saveAsPDF(pdfSettings);
+
+            console.log("PDF Status:", status);
+
+            if (status === 'saved') {
+                console.log("Erfolg! PDF wurde gespeichert.");
+                // Nur bei Erfolg schließen wir das Tab (optional mit Verzögerung)
+                setTimeout(() => {
+                    browser.tabs.remove(tabId);
+                    URL.revokeObjectURL(url);
+                }, 1000);
+            } else {
+                console.warn("PDF wurde nicht gespeichert. Status:", status);
+                // Wir lassen das Tab OFFEN, damit Sie sehen, was passiert ist!
+            }
+
+            return { success: status === 'saved' };
+
+        } catch (error) {
+            console.error("KRITISCHER FEHLER im Background Script:", error);
+            // Tab offen lassen zur Diagnose
+            return { success: false, error: error.message };
+        } finally {
+            // 6. Aufräumen
+            if (tabId) {
+                await browser.tabs.remove(tabId);
+            }
+            if (url) {
+                URL.revokeObjectURL(url);
+            }
+        }
     }
 });
-
-/**
- * Generiert ein PDF aus dem HTML-Inhalt und gibt die Blob-URL zurück.
- * @param {string} htmlContent - Der bereinigte HTML-Inhalt.
- * @returns {Promise<object>} Ein Promise, das mit { pdfBlobUrl: string } oder { error: string } aufgelöst wird.
- */
-async function handlePdfGeneration(htmlContent) {
-    if (typeof jsPDF === 'undefined') {
-        console.error("Fehler beim dynamischen Laden der PDF-Bibliotheken");
-        return { error: "PDF-Bibliotheken konnten nicht geladen werden." };
-    }
-    // 1. Erstelle ein temporäres DOM-Element aus dem empfangenen HTML-String
-    const tempElement = document.createElement('div');
-    tempElement.innerHTML = htmlContent;
-
-    // Optional: Füge Styles hinzu, die für jsPDF.html() wichtig sind
-    // Z.B. für die korrekte Font-Größe und Margin-Behandlung
-    tempElement.style.width = '210mm'; // A4-Breite für korrekte Skalierung
-    tempElement.style.padding = '10mm';
-
-    try {
-        // 2. Initialisiere jsPDF
-        const pdf = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4',
-            compress: true
-        });
-
-        // 3. Generiere das PDF asynchron mit echtem Text
-        return new Promise((resolve, reject) => {
-
-            // Verwende jsPDF.html() mit dem temporären Element
-            pdf.html(tempElement, {
-                callback: (generatedPdf) => {
-                    try {
-                        // 4. Generiere den Blob und die URL
-                        const pdfBlob = generatedPdf.output('blob');
-                        const pdfBlobUrl = URL.createObjectURL(pdfBlob);
-
-                        console.log('✓ jsPDF generiert mit selectierbarem Text');
-                        resolve({ pdfBlobUrl: pdfBlobUrl });
-                    } catch (e) {
-                        reject(e);
-                    }
-                },
-
-                // Konfiguration aus Ihrem Beispiel übernommen und leicht angepasst:
-                margin: [10, 10, 10, 10],
-                autoPaging: 'text',
-                html2canvas: {
-                    scale: 2,
-                    useCORS: true,
-                    letterRendering: true
-                },
-                jsPDF: {
-                    format: 'a4'
-                },
-
-                // Error-Handling im Callback
-                error: (error) => {
-                    reject(new Error(`jsPDF-Generierungsfehler: ${error}`));
-                }
-            });
-        });
-
-    } catch (error) {
-        console.error("PDF-Generierung (jsPDF) fehlgeschlagen:", error);
-        return { error: error.message };
-    }
-}

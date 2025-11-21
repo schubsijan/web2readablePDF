@@ -1,4 +1,5 @@
 import { Readability } from '@mozilla/readability';
+import domtoimage from "dom-to-image-more";
 
 const OVERLAY_ID = 'zotero-pdf-editor-overlay';
 let isOverlayVisible = false;
@@ -39,8 +40,8 @@ function showOverlay(articleData) {
     hideBtn.textContent = '✖';
     hideBtn.addEventListener('click', () => hideOverlay());
     const addPdfBtn = document.createElement('button');
-    addPdfBtn.textContent = 'Pdf einbetten';
-    addPdfBtn.addEventListener('click', () => embedPdf(addPdfBtn, articleData));
+    addPdfBtn.textContent = 'Pdf speichern';
+    addPdfBtn.addEventListener('click', () => savePdf(addPdfBtn, articleData));
     const overlayHeader = document.createElement('div');
     overlayHeader.style.width = '100%'
     // 3. Füge dem Overlay den Content hinzu
@@ -134,9 +135,7 @@ async function getReadableHtml() {
     const tempDivForAdjust = document.createElement('div');
     tempDivForAdjust.innerHTML = article.content;
 
-    // Asynchron auf die Konvertierung warten
-    const processedDiv = await convertImagesToBase64(tempDivForAdjust);
-    const adjustedContent = adjustContent(processedDiv.innerHTML);
+    const adjustedContent = adjustContent(tempDivForAdjust.innerHTML);
 
     // 5. Kombiniere Header und Content
     const fullHtml = headerHtml + adjustedContent;
@@ -174,104 +173,170 @@ console.log("Zotero PDF Trim Content Script bereit.");
  * @param {HTMLElement} saveBtn - Der Save-Button, um seinen Zustand zu ändern.
  * @param {object} articleData - Das vollständige Objekt von getReadableHtml().
  */
-function embedPdf(saveBtn, articleData) {
-    // Zustand des Buttons ändern
-    saveBtn.textContent = 'PDF wird erstellt...';
+async function savePdf(saveBtn, articleData) {
+    saveBtn.textContent = 'Sende an Firefox...';
     saveBtn.disabled = true;
 
-    // Sende den bereinigten HTML-Inhalt an das Hintergrundskript
-    browser.runtime.sendMessage({
-        command: "generate-pdf",
-        htmlContent: articleData.html
-    })
-        .then(response => {
-            if (response.pdfBlobUrl) {
-                // PDF-Erstellung erfolgreich, jetzt einbetten
-                console.log("PDF-Blob-URL erhalten. Einbettung...");
-                console.log("pdfblob", response.pdfBlobUrl);
-                embedHiddenZoteroLink(saveBtn, response.pdfBlobUrl, articleData.metadata.title);
-            } else {
-                // Fehlerbehandlung
-                console.error("Fehler bei der PDF-Erstellung:", response.error);
-                saveBtn.textContent = '❌ Fehler. Erneut versuchen.';
-                saveBtn.disabled = false;
-            }
-        })
-        .catch(error => {
-            console.error("Fehler beim Senden der Nachricht an das Hintergrundskript:", error);
-            saveBtn.textContent = '❌ Kommunikationsfehler.';
-            saveBtn.disabled = false;
+    // Wir senden das komplette HTML an das Background-Script
+    // Wir packen es in eine vollständige HTML-Struktur, damit Styles stimmen
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>${articleData.metadata.title}</title>
+            <style>
+                body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+                img { max-width: 100%; height: auto; }
+                /* Hier kannst du noch mehr CSS für das PDF definieren */
+            </style>
+        </head>
+        <body>
+            ${articleData.html}
+        </body>
+        </html>
+    `;
+
+    try {
+        await browser.runtime.sendMessage({
+            command: 'generate-pdf-native',
+            html: htmlContent,
+            title: articleData.metadata.title
         });
+        saveBtn.textContent = 'PDF gespeichert!';
+    } catch (e) {
+        console.error(e);
+        saveBtn.textContent = 'Fehler';
+    } finally {
+        setTimeout(() => { saveBtn.disabled = false; saveBtn.textContent = 'Pdf speichern'; }, 2000);
+    }
 }
 
 /**
- * Ersetzt den Save-Button durch einen versteckten Link, den Zotero parsen kann.
- * @param {HTMLElement} saveBtn - Der Save-Button.
- * @param {string} pdfBlobUrl - Die URL des generierten PDF-Blobs.
+ * Sendet URLs an background.js und erhält Base64 zurück.
+ * Umgeht CSP und CORS der Webseite.
  */
-function embedHiddenZoteroLink(saveBtn, pdfBlobUrl, title) {
-    const parent = saveBtn.parentNode;
+async function replaceImagesWithBase64(container) {
+    const images = container.querySelectorAll('img');
 
-    // 1. Erstelle den versteckten Link
-    const zoteroLink = document.createElement('a');
-    zoteroLink.id = 'zotero-pdf-download-link';
-    zoteroLink.href = pdfBlobUrl;
+    const promises = Array.from(images).map(async (img) => {
+        const originalSrc = img.src;
 
-    // WICHTIG: Setze den Dateinamen für den Download
-    zoteroLink.download = `${title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+        // Wenn kein src da ist oder es schon data: ist, überspringen
+        if (!originalSrc || originalSrc.startsWith('data:')) return;
 
-    // 2. Mache den Link unsichtbar, aber im DOM vorhanden
-    zoteroLink.style.display = 'none';
+        try {
+            // Nachricht an Background senden
+            const response = await browser.runtime.sendMessage({
+                command: 'fetch-image-as-base64',
+                url: originalSrc
+            });
 
-    // 3. Füge den Link dem DOM hinzu (z.B. am Body oder Header-Container)
-    parent.appendChild(zoteroLink);
-
-    // 4. Status-Update für den Benutzer
-    saveBtn.textContent = '📥 PDF-Link bereit (Warten auf Zotero)';
-    saveBtn.disabled = true;
-
-    console.log("Versteckter Zotero-Link erstellt mit Blob-URL:", pdfBlobUrl);
-}
-
-async function convertImagesToBase64(tempDiv) {
-    const images = tempDiv.querySelectorAll('img');
-    const promises = [];
-
-    images.forEach(img => {
-        promises.push(new Promise(resolve => {
-            // 1. Erstelle ein temporäres Canvas-Element
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const image = new Image();
-
-            // Behandeln Sie Cross-Origin-Bilder, falls möglich
-            image.crossOrigin = "Anonymous";
-
-            // Verwende die absolute URL der Quelle
-            image.src = img.src;
-
-            image.onload = () => {
-                canvas.width = image.naturalWidth;
-                canvas.height = image.naturalHeight;
-                ctx.drawImage(image, 0, 0);
-
-                // Konvertiere zu Data URL (hier WebP, wie gewünscht)
-                const dataUrl = canvas.toDataURL('image/webp', 0.9);
-
-                img.src = dataUrl;
-                resolve();
-            };
-
-            // Wichtig: Fehler bei nicht ladbaren Bildern behandeln
-            image.onerror = () => {
-                console.warn("Bild konnte nicht geladen oder konvertiert werden:", img.src);
-                // Bild durch ein 1x1 Pixel ersetzen oder entfernen
-                img.remove();
-                resolve();
-            };
-        }));
+            if (response && response.success) {
+                img.src = response.data;
+                // Markiere für html2canvas, dass dieses Bild sicher ist
+                img.setAttribute('data-html2canvas-ignore', 'false');
+            } else {
+                console.warn("Bild-Fetch fehlgeschlagen:", originalSrc, response?.error);
+                img.remove(); // Kaputtes Bild entfernen, damit PDF nicht crasht
+            }
+        } catch (error) {
+            console.error("Kommunikationsfehler mit Background-Script:", error);
+            img.remove();
+        }
     });
 
     await Promise.all(promises);
-    return tempDiv; // Gibt das DOM mit Base64-Bildern zurück
+}
+
+/**
+ * Ersetzt ALLE Iframes durch statische Platzhalter-Divs.
+ * Verhindert SecurityError in html2canvas und bewahrt das Layout.
+ */
+function flattenIframes(container) {
+    const iframes = container.querySelectorAll('iframe, frame, embed, object');
+
+    iframes.forEach(iframe => {
+        try {
+            // Abmessungen retten, damit das Layout im PDF nicht springt
+            const width = iframe.offsetWidth || iframe.width || 300;
+            const height = iframe.offsetHeight || iframe.height || 200;
+
+            // Quelle retten (src oder data-src für Lazy Loading)
+            const src = iframe.src || iframe.getAttribute('data-src') || iframe.getAttribute('data-original') || '';
+
+            // Platzhalter erstellen
+            const placeholder = document.createElement('div');
+
+            // Styling: Soll aussehen wie ein grauer Kasten im PDF
+            placeholder.style.cssText = `
+                width: ${width}px;
+                height: ${height}px;
+                max-width: 100%;
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                margin: 10px auto;
+                font-family: sans-serif;
+                color: #555;
+                text-align: center;
+                padding: 10px;
+                box-sizing: border-box;
+            `;
+
+            // Inhalt des Platzhalters
+            let contentHtml = `<div style="font-weight:bold; margin-bottom:5px;">Externer Inhalt</div>`;
+
+            if (src && src.startsWith('http')) {
+                // Link kürzen für die Optik
+                const urlObj = new URL(src);
+                const domain = urlObj.hostname.replace('www.', '');
+
+                contentHtml += `
+                    <div style="font-size: 0.8em;">${domain}</div>
+                    <a href="${src}" target="_blank" style="color: #0066cc; font-size: 0.7em; margin-top: 5px; word-break: break-all;">${src.substring(0, 40)}...</a>
+                `;
+            } else {
+                contentHtml += `<div style="font-size: 0.8em;">Inhalt nicht verfügbar</div>`;
+            }
+
+            placeholder.innerHTML = contentHtml;
+
+            // Austausch vornehmen
+            iframe.parentNode.replaceChild(placeholder, iframe);
+
+        } catch (e) {
+            console.warn("Konnte Iframe nicht ersetzen:", e);
+            // Im Notfall Iframe löschen, damit PDF nicht abstürzt
+            iframe.remove();
+        }
+    });
+}
+
+/**
+ * Entfernt alle CSS-Hintergrundbilder, um CORS-Fehler zu vermeiden.
+ * html2canvas versucht sonst, diese zu laden, was zum SecurityError führt.
+ */
+function removeBackgroundImages(container) {
+    const allElements = container.querySelectorAll('*');
+
+    allElements.forEach(el => {
+        const style = window.getComputedStyle(el);
+        if (style.backgroundImage && style.backgroundImage !== 'none') {
+            // Prüfen, ob es eine URL ist (und kein linear-gradient o.ä.)
+            if (style.backgroundImage.includes('url(')) {
+                // Wir entfernen das Hintergrundbild, um sicherzugehen
+                el.style.backgroundImage = 'none';
+                // Optional: Hintergrundfarbe setzen, damit Text lesbar bleibt
+                el.style.backgroundColor = '#ffffff';
+            }
+        }
+    });
+}
+
+if (typeof global === "undefined") {
+    window.global = window;
 }
