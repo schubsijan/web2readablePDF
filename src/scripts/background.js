@@ -43,12 +43,14 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 
             console.log("Tab ist geladen. Starte saveAsPDF...");
 
-            // 4. PDF Einstellungen - MINIMAL
-            // Wir lassen alles weg, was Fehler verursachen könnte.
-            // Firefox nutzt dann Standard A4.
+            // 4. PDF Einstellungen
             const pdfSettings = {
-                headerCenter: message.title || "Artikel",
-                footerCenter: "&P / &PT"
+                headerLeft: "",
+                headerCenter: "",
+                headerRight: "",
+                footerLeft: "",
+                footerCenter: "",
+                footerRight: ""
             };
 
             // 5. API Aufruf
@@ -59,21 +61,20 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 
             if (status === 'saved') {
                 console.log("Erfolg! PDF wurde gespeichert.");
-                // Nur bei Erfolg schließen wir das Tab (optional mit Verzögerung)
-                setTimeout(() => {
-                    browser.tabs.remove(tabId);
-                    URL.revokeObjectURL(url);
-                }, 1000);
             } else {
                 console.warn("PDF wurde nicht gespeichert. Status:", status);
                 // Wir lassen das Tab OFFEN, damit Sie sehen, was passiert ist!
+                // Damit das Tab zur Diagnose offen bleibt, setzen wir tabId auf null.
+                // Das verhindert, dass der finally-Block es schließt.
+                tabId = null;
             }
 
             return { success: status === 'saved' };
 
         } catch (error) {
             console.error("KRITISCHER FEHLER im Background Script:", error);
-            // Tab offen lassen zur Diagnose
+            // Tab zur Diagnose offen lassen
+            tabId = null;
             return { success: false, error: error.message };
         } finally {
             // 6. Aufräumen
