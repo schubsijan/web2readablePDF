@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "module": "es6",
+    "target": "es2020",
+    "checkJs": true,
+    "allowJs": true,
+     "moduleResolution": "nodenext",
+    "types": ["firefox-webext-browser"] 
+  },
+  "include": ["src/**/*", "*.js", "*.d.ts"],
+  "exclude": ["node_modules", "dist"]
+}

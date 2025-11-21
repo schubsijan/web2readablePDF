@@ -1,6 +1,6 @@
+// @ts-check
 // Event-Listener für den Klick auf das Addon-Icon
 browser.action.onClicked.addListener((tab) => {
-    // Sende eine Nachricht an das Content-Skript des aktuellen Tabs
     browser.tabs.sendMessage(tab.id, {
         command: "toggle-editor"
     }).catch(error => {
@@ -9,7 +9,7 @@ browser.action.onClicked.addListener((tab) => {
     });
 });
 
-browser.runtime.onMessage.addListener(async (message, sender) => {
+browser.runtime.onMessage.addListener(async (message) => {
     if (message.command === 'generate-pdf-native') {
 
         let tabId = null;
@@ -18,11 +18,9 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
         try {
             console.log("Start: Erzeuge PDF...");
 
-            // 1. Blob URL erstellen
             const htmlBlob = new Blob([message.html], { type: 'text/html' });
             url = URL.createObjectURL(htmlBlob);
 
-            // 2. Tab erstellen und AKTIV schalten
             const tab = await browser.tabs.create({
                 url: url,
                 active: true
@@ -32,6 +30,10 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 
             // 3. Warten, bis der Tab vollständig geladen ist
             await new Promise(resolve => {
+                /**
+                    * @param {number} updatedTabId - Die ID des aktualisierten Tabs
+                    * @param {browser.tabs._OnUpdatedChangeInfo} changeInfo - Enthält status, url, etc.
+                */
                 const listener = (updatedTabId, changeInfo) => {
                     if (updatedTabId === tabId && changeInfo.status === 'complete') {
                         browser.tabs.onUpdated.removeListener(listener);
@@ -43,7 +45,6 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 
             console.log("Tab ist geladen. Starte saveAsPDF...");
 
-            // 4. PDF Einstellungen
             const pdfSettings = {
                 headerLeft: "",
                 headerCenter: "",
@@ -53,8 +54,6 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
                 footerRight: ""
             };
 
-            // 5. API Aufruf
-            // Wir warten auf den Status
             const status = await browser.tabs.saveAsPDF(pdfSettings);
 
             console.log("PDF Status:", status);
