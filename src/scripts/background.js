@@ -9,7 +9,15 @@ browser.action.onClicked.addListener((tab) => {
     });
 });
 
-browser.runtime.onMessage.addListener(async (message) => {
+browser.runtime.onMessage.addListener(async (message, sender) => {
+    if (message.command === 'collect-all-frames') {
+        const tabId = sender.tab.id;
+
+        // WICHTIG: Wir geben das Promise DIREKT zurück.
+        // Firefox wartet auf die Auflösung und sendet das Objekt zurück an das Content Script.
+        return collectFrames(tabId);
+    }
+
     if (message.command === 'generate-pdf-native') {
 
         let tabId = null;
@@ -86,3 +94,49 @@ browser.runtime.onMessage.addListener(async (message) => {
         }
     }
 });
+
+/**
+ * @param {number} tabId 
+ * */
+async function collectFrames(tabId) {
+    try {
+        // 1. Hole alle Frame-Infos des aktuellen Tabs
+        const frames = await browser.webNavigation.getAllFrames({ tabId });
+
+        const frameContents = [];
+
+        // 2. Frage jeden Frame (außer Frame 0 = Top) nach seinem Inhalt
+        const promises = frames.map(async (frame) => {
+            if (frame.frameId === 0) return; // Top Frame überspringen
+
+            try {
+                // Sende Nachricht an spezifischen Frame
+                const response = await browser.tabs.sendMessage(
+                    tabId,
+                    { command: "get-frame-content" },
+                    { frameId: frame.frameId }
+                );
+
+                if (response && response.url && response.content) {
+                    frameContents.push({
+                        url: response.url,
+                        content: response.content
+                    });
+                }
+            } catch (err) {
+                // Manche Frames (z.B. cross-origin protected) antworten evtl. nicht oder timeouten
+                // Das ignorieren wir, damit der Rest weiterläuft.
+                // console.warn(`Frame ${frame.frameId} antwortet nicht:`, err);
+            }
+        });
+
+        await Promise.all(promises);
+
+        // 3. Gib das Array zurück
+        return { success: true, frames: frameContents };
+
+    } catch (e) {
+        console.error("Fehler beim Sammeln der Frames:", e);
+        return { success: false, frames: [] };
+    }
+}

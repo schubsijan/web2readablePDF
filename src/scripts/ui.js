@@ -1,14 +1,15 @@
 // @ts-check
 import van from 'vanjs-core'
 import { OVERLAY_ID, savePdfLogic } from './logic.js';
-import { containerStyle, headerStyle, overlayStyle } from './styles.js';
+import { containerStyle, contentCss, headerStyle, overlayStyle } from './styles.js';
 
-const { div, button } = van.tags;
+const { div, button, input, span, label, style } = van.tags;
 
 let isOverlayVisible = false;
 
 const pdfBtnState = van.state('Pdf speichern');
 const pdfBtnDisabled = van.state(false);
+const mode = van.state('readable'); // 'readable' | 'clean'
 
 /**
  * UI-Komponente: Das Overlay
@@ -19,8 +20,11 @@ function OverlayComponent(articleData) {
         pdfBtnState.val = 'Sende an Firefox...';
         pdfBtnDisabled.val = true;
 
+        const htmlToSave = mode.val === 'readable' ? articleData.readableHtml : articleData.cleanHtml;
+        const title = articleData.metadata.title || document.title;
+
         try {
-            await savePdfLogic(articleData);
+            await savePdfLogic(htmlToSave, title);
             pdfBtnState.val = 'PDF gespeichert!';
         } catch (e) {
             console.error(e);
@@ -33,12 +37,46 @@ function OverlayComponent(articleData) {
         }
     };
 
+    /**
+    * @param {string} value 
+    * @param {string} text 
+    */
+    const ModeRadioButton = (value, text) => label(
+        { style: "margin-right: 15px; cursor: pointer; display: flex; align-items: center; gap: 5px;" },
+        input({
+            type: "radio",
+            name: "viewMode",
+            value: value,
+            checked: () => mode.val === value, // Binding: Checked status reaktiv
+            onclick: () => mode.val = value    // Action: State ändern
+        }),
+        span(text)
+    );
+
     return div({ id: OVERLAY_ID, style: overlayStyle },
+        style(contentCss),
+        // Header
         div({ style: headerStyle },
-            button({ onclick: hideOverlay }, '✖'),
+            button({ onclick: hideOverlay, style: "margin-right: 10px;" }, '✖'),
+
+            // Switcher UI
+            div({ style: "display: flex; border-right: 1px solid #ccc; padding-right: 10px; margin-right: 10px;" },
+                ModeRadioButton('readable', 'Leseansicht'),
+                ModeRadioButton('clean', 'Original (Bereinigt)')
+            ),
+
             button({ onclick: handleSave, disabled: pdfBtnDisabled }, pdfBtnState)
         ),
-        div({ id: 'editor-content-container', style: containerStyle, innerHTML: articleData.html })
+
+        div({ id: 'editor-content-container', style: containerStyle, class: () => mode.val === 'clean' ? 'clean-mode' : '' },
+            () => {
+                const contentWrapper = div();
+                contentWrapper.innerHTML = mode.val === 'readable'
+                    ? articleData.readableHtml
+                    : articleData.cleanHtml;
+                return contentWrapper;
+            }
+        )
     );
 }
 

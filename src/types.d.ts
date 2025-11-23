@@ -10,8 +10,8 @@ declare global {
 
   interface ArticleData {
     metadata: ArticleMetadata;
-    html: string;
-    contentElement?: HTMLElement;
+    readableHtml: string;
+    cleanHtml: string;
   }
 }
 

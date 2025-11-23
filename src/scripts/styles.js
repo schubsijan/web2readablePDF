@@ -29,4 +29,55 @@ export const headerStyle = `
     top: 0;
     background-color: white;
     padding: 10px;
+    z-index: 9999999999999999999999999999999999999999999;
+`;
+
+export const contentCss = `
+    /* Nur anwenden, wenn der Container die Klasse "clean-mode" hat */
+    
+    .clean-mode {
+        font-family: Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        overflow-wrap: break-word;
+    }
+
+    /* Brute Force Reset für ALLE Elemente innerhalb von clean-mode */
+    .clean-mode * {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        position: static !important; /* Fixiert Elemente im Fluss */
+        float: none !important;
+        z-index: auto !important; /* Verhindert, dass Elemente über den Header ragen */
+    }
+
+    /* Bilder und Medien zähmen */
+    .clean-mode img,
+    .clean-mode video,
+    .clean-mode iframe,
+    .clean-mode svg {
+        max-width: 100% !important;
+        height: auto !important;
+        display: block !important;
+    }
+
+    /* Tabellen scrollbar machen */
+    .clean-mode table {
+        display: block !important;
+        width: 100% !important;
+        overflow-x: auto !important;
+    }
+
+    /* Layout-Divs neutralisieren */
+    .clean-mode div, 
+    .clean-mode section, 
+    .clean-mode article {
+        width: auto !important;
+        height: auto !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding-right: 0 !important;
+        padding-left: 0 !important;
+        transform: none !important; /* Verhindert komplexe Layering-Probleme */
+    }
 `;
