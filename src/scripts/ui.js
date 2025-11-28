@@ -1,108 +1,87 @@
 // @ts-check
 import van from 'vanjs-core'
-import { OVERLAY_ID, savePdfLogic } from './logic.js';
-import { containerStyle, contentCss, headerStyle, overlayStyle } from './styles.js';
+import { overlayStyle, headerStyle, printCss } from './styles.js';
 
-const { div, button, input, span, label, style } = van.tags;
+// ID, damit wir das Overlay finden und auch per CSS ausblenden können
+const OVERLAY_ID = 'zotero-pdf-editor-overlay';
+
+const { div, button, style, span } = van.tags;
 
 let isOverlayVisible = false;
-
-const pdfBtnState = van.state('Pdf speichern');
+const pdfBtnState = van.state('Seite speichern');
 const pdfBtnDisabled = van.state(false);
-const mode = van.state('readable'); // 'readable' | 'clean'
 
 /**
- * UI-Komponente: Das Overlay
- * @param {ArticleData} articleData
+ * UI-Komponente: Nur noch die Header-Leiste
  */
-function OverlayComponent(articleData) {
+function OverlayComponent() {
+
     const handleSave = async () => {
-        pdfBtnState.val = 'Sende an Firefox...';
+        pdfBtnState.val = 'Speichere...';
         pdfBtnDisabled.val = true;
 
-        const htmlToSave = mode.val === 'readable' ? articleData.readableHtml : articleData.cleanHtml;
-        const title = articleData.metadata.title || document.title;
-
         try {
-            await savePdfLogic(htmlToSave, title);
-            pdfBtnState.val = 'PDF gespeichert!';
+            // Sende Nachricht an Background: "Speichere MICH (diesen Tab)"
+            const response = await browser.runtime.sendMessage({
+                command: 'generate-pdf'
+            });
+
+            if (response && response.success) {
+                pdfBtnState.val = 'Gespeichert!';
+            } else {
+                pdfBtnState.val = 'Fehler!';
+            }
         } catch (e) {
             console.error(e);
-            pdfBtnState.val = 'Fehler';
+            pdfBtnState.val = 'Error';
         } finally {
             setTimeout(() => {
                 pdfBtnDisabled.val = false;
-                pdfBtnState.val = 'Pdf speichern';
+                pdfBtnState.val = 'Seite speichern';
             }, 2000);
         }
     };
 
-    /**
-    * @param {string} value 
-    * @param {string} text 
-    */
-    const ModeRadioButton = (value, text) => label(
-        { style: "margin-right: 15px; cursor: pointer; display: flex; align-items: center; gap: 5px;" },
-        input({
-            type: "radio",
-            name: "viewMode",
-            value: value,
-            checked: () => mode.val === value, // Binding: Checked status reaktiv
-            onclick: () => mode.val = value    // Action: State ändern
-        }),
-        span(text)
-    );
-
     return div({ id: OVERLAY_ID, style: overlayStyle },
-        style(contentCss),
-        // Header
+        // Wir injizieren die Print-CSS direkt in das Overlay
+        style(printCss),
+
         div({ style: headerStyle },
-            button({ onclick: hideOverlay, style: "margin-right: 10px;" }, '✖'),
-
-            // Switcher UI
-            div({ style: "display: flex; border-right: 1px solid #ccc; padding-right: 10px; margin-right: 10px;" },
-                ModeRadioButton('readable', 'Leseansicht'),
-                ModeRadioButton('clean', 'Original (Bereinigt)')
-            ),
-
+            span({ style: "font-weight: bold; margin-right: 10px;" }, "Web2PDF"),
             button({ onclick: handleSave, disabled: pdfBtnDisabled }, pdfBtnState)
         ),
 
-        div({ id: 'editor-content-container', style: containerStyle, class: () => mode.val === 'clean' ? 'clean-mode' : '' },
-            () => {
-                const contentWrapper = div();
-                contentWrapper.innerHTML = mode.val === 'readable'
-                    ? articleData.readableHtml
-                    : articleData.cleanHtml;
-                return contentWrapper;
-            }
-        )
+        button({ onclick: hideOverlay, style: "background: transparent; border: none; font-size: 1.2em; cursor: pointer;" }, '✖')
     );
 }
 
-/**
- * Erstellt und zeigt das Overlay (Einstiegspunkt)
- * @param {ArticleData} articleData 
- */
-export function showOverlay(articleData) {
+export function showOverlay() {
     if (document.getElementById(OVERLAY_ID)) return;
 
-    const overlay = OverlayComponent(articleData);
+    document.body.setAttribute("web2readablePDF-overlay-visible", "")
+
+    const selectorsToHide = [
+        'header', 'footer', 'nav', 'aside',
+        'script', 'style', 'noscript',
+        '[role="banner"]', '[role="navigation"]', '[role="contentinfo"]',
+        '.cookie-banner', '#cookie-banner', '.ad', '.advertisement'
+    ];
+    selectorsToHide.forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => el.setAttribute("web2readablePDF-hide", ""));
+    });
+
+    const overlay = OverlayComponent();
     van.add(document.body, overlay);
 
     isOverlayVisible = true;
-    console.log("Overlay erstellt und Content geladen.");
 }
 
-/**
- * Entfernt das Overlay
- */
 export function hideOverlay() {
+    document.body.removeAttribute("web2readablePDF-overlay-visible")
     const overlay = document.getElementById(OVERLAY_ID);
     if (overlay) {
         overlay.remove();
         isOverlayVisible = false;
-        console.log("Overlay entfernt.");
     }
 }
 

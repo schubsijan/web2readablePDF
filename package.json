@@ -5,7 +5,7 @@
   "scripts": {
     "build": "vite build",
     "watch": "vite build --watch",
-    "run": "web-ext run --source-dir ./dist",
+    "run": "web-ext run --source-dir ./dist --url https://adamtooze.substack.com/p/chartbook-461-ordering-not-order",
     "dev": "npm run build && npm run watch & npm run run"
   },
   "dependencies": {

@@ -4,13 +4,17 @@ export const overlayStyle = `
     top: 0;
     left: 0;
     width: 100%;
-    height: 100%;
-    background-color: white;
-    z-index: 99999;
-    overflow-y: scroll;
-    padding-bottom: 20px;
-    box-sizing: border-box;
+    height: auto;
+    background-color: #f0f0f0;
+    border-bottom: 1px solid #ccc;
+    z-index: 2147483647; /* Maximaler Z-Index */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     font-family: Arial, sans-serif;
+    padding: 10px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 `;
 
 export const containerStyle = `
@@ -23,7 +27,6 @@ export const headerStyle = `
     width: 100%;
     display: flex;
     gap: 10px;
-    margin-bottom: 10px;
     align-items: center;
     position: sticky;
     top: 0;
@@ -32,52 +35,28 @@ export const headerStyle = `
     z-index: 9999999999999999999999999999999999999999999;
 `;
 
-export const contentCss = `
-    /* Nur anwenden, wenn der Container die Klasse "clean-mode" hat */
+export const printCss = `
+    @media print {
+        #zotero-pdf-editor-overlay, header, footer, nav, aside, [role="banner"], [role="navigation"], [role="contentinfo"], .cookie-banner, #cookie-banner, .ad, .advertisement, [web2readablePDF-hide] {
+            display: none !important;
+        }
+        
+        img { max-width: 100%; height: auto; display: block; page-break-inside: avoid; break-inside: avoid; }
+        figure { display: block; margin: 2em 0; page-break-inside: avoid; break-inside: avoid; }
+        h1, h2, h3, h4, h5 { page-break-after: avoid; break-after: avoid; }
+    }
     
-    .clean-mode {
-        font-family: Helvetica, Arial, sans-serif;
-        line-height: 1.6;
-        color: #333;
-        overflow-wrap: break-word;
+    body[web2readablePDF-overlay-visible] [web2readablePDF-hide] {
+        display: none !important;
     }
 
-    /* Brute Force Reset für ALLE Elemente innerhalb von clean-mode */
-    .clean-mode * {
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-        position: static !important; /* Fixiert Elemente im Fluss */
-        float: none !important;
-        z-index: auto !important; /* Verhindert, dass Elemente über den Header ragen */
+    /* Optional: Platzhalter, damit der fixierte Header im Browser nicht den Content verdeckt */
+    body {
+        margin-top: 60px !important; 
     }
-
-    /* Bilder und Medien zähmen */
-    .clean-mode img,
-    .clean-mode video,
-    .clean-mode iframe,
-    .clean-mode svg {
-        max-width: 100% !important;
-        height: auto !important;
-        display: block !important;
-    }
-
-    /* Tabellen scrollbar machen */
-    .clean-mode table {
-        display: block !important;
-        width: 100% !important;
-        overflow-x: auto !important;
-    }
-
-    /* Layout-Divs neutralisieren */
-    .clean-mode div, 
-    .clean-mode section, 
-    .clean-mode article {
-        width: auto !important;
-        height: auto !important;
-        margin-left: 0 !important;
-        margin-right: 0 !important;
-        padding-right: 0 !important;
-        padding-left: 0 !important;
-        transform: none !important; /* Verhindert komplexe Layering-Probleme */
+    @media print {
+        body {
+            margin-top: 0 !important;
+        }
     }
 `;
