@@ -37,26 +37,60 @@ export const headerStyle = `
 
 export const printCss = `
     @media print {
+        /* 1. Ausblenden */
         #zotero-pdf-editor-overlay, header, footer, nav, aside, [role="banner"], [role="navigation"], [role="contentinfo"], .cookie-banner, #cookie-banner, .ad, .advertisement, [web2readablePDF-hide] {
             display: none !important;
         }
-        
-        img { max-width: 100%; height: auto; display: block; page-break-inside: avoid; break-inside: avoid; }
-        figure { display: block; margin: 2em 0; page-break-inside: avoid; break-inside: avoid; }
-        h1, h2, h3, h4, h5 { page-break-after: avoid; break-after: avoid; }
-    }
-    
-    body[web2readablePDF-overlay-visible] [web2readablePDF-hide] {
-        display: none !important;
+
+        /* 2. Farben */
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+        }
+
+        /* 3. Shadow Host (Der Iframe-Container) */
+        [web2readablePDF-iframe] {
+            display: block !important;
+            position: relative !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            background-color: white !important;
+            
+            /* KORREKTUR: Kein width: 100% hier! */
+            max-width: 100% !important; 
+            box-sizing: border-box !important;
+            margin-bottom: 2em !important;
+        }
+
+        /* 4. Globaler Reset */
+        @page {
+            margin: 15mm;
+            size: auto;
+        }
+
+        html, body {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background-color: white !important;
+            min-height: 100%;
+        }
+
+        img, svg, canvas {
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            page-break-inside: avoid;
+        }
+
+        /* Text-Reset (NICHT für Iframe) */
+        p, h1, h2, h3, h4, h5, h6, li, span, div:not([web2readablePDF-iframe]), article {
+            overflow-wrap: break-word !important;
+        }
     }
 
-    /* Optional: Platzhalter, damit der fixierte Header im Browser nicht den Content verdeckt */
-    body {
-        margin-top: 60px !important; 
-    }
-    @media print {
-        body {
-            margin-top: 0 !important;
-        }
+    body[web2readablePDF-overlay-visible] [web2readablePDF-hide] {
+        display: none !important;
     }
 `;

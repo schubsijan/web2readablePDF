@@ -13,20 +13,20 @@ const pdfBtnDisabled = van.state(false);
 
 /**
  * UI-Komponente: Nur noch die Header-Leiste
+ * * @param {() => Promise<{success: boolean, error?: string}>} onSave 
  */
-function OverlayComponent() {
+function OverlayComponent(onSave) {
 
     const handleSave = async () => {
-        pdfBtnState.val = 'Speichere...';
+        pdfBtnState.val = 'Verarbeite...';
         pdfBtnDisabled.val = true;
 
         try {
-            // Sende Nachricht an Background: "Speichere MICH (diesen Tab)"
-            const response = await browser.runtime.sendMessage({
-                command: 'generate-pdf'
-            });
+            // 2. Wir rufen die übergebene Funktion auf, statt direkt zu senden
+            // Diese Funktion gibt uns das Ergebnis zurück (Erfolg/Fehler)
+            const result = await onSave();
 
-            if (response && response.success) {
+            if (result && result.success) {
                 pdfBtnState.val = 'Gespeichert!';
             } else {
                 pdfBtnState.val = 'Fehler!';
@@ -40,6 +40,7 @@ function OverlayComponent() {
                 pdfBtnState.val = 'Seite speichern';
             }, 2000);
         }
+
     };
 
     return div({ id: OVERLAY_ID, style: overlayStyle },
@@ -55,7 +56,11 @@ function OverlayComponent() {
     );
 }
 
-export function showOverlay() {
+/**
+ * Zeigt das Overlay an und bereitet die Seite für den Druck vor (versteckt Header/Footer etc.).
+ * * @param {() => Promise<{success: boolean, error?: string}>} onSaveCallback 
+ */
+export function showOverlay(onSaveCallback) {
     if (document.getElementById(OVERLAY_ID)) return;
 
     document.body.setAttribute("web2readablePDF-overlay-visible", "")
@@ -70,7 +75,7 @@ export function showOverlay() {
         document.querySelectorAll(sel).forEach(el => el.setAttribute("web2readablePDF-hide", ""));
     });
 
-    const overlay = OverlayComponent();
+    const overlay = OverlayComponent(onSaveCallback)
     van.add(document.body, overlay);
 
     isOverlayVisible = true;
